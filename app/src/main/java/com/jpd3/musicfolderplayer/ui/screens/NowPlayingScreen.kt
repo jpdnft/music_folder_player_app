@@ -13,7 +13,10 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material3.Button
+import com.jpd3.musicfolderplayer.ui.theme.PlayerButton as Button
+import com.jpd3.musicfolderplayer.ui.theme.PlayerOutlinedButton as OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -46,18 +49,22 @@ fun NowPlayingScreen(
     ) {
         Text(
             text = "Now Playing",
-            style = MaterialTheme.typography.headlineMedium
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 20.dp),
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
         Text(
             text = trackName,
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(top = 12.dp)
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(20.dp)
         )
-        Text(
-            text = "Artist • Album",
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(bottom = 20.dp)
-        )
+        }
 
         Slider(value = progress, onValueChange = { progress = it }, modifier = Modifier.fillMaxWidth())
         Row(
@@ -75,10 +82,10 @@ fun NowPlayingScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = onPrevious) {
+            OutlinedButton(onClick = onPrevious) {
                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
             }
-            Button(onClick = {}) {
+            OutlinedButton(onClick = {}) {
                 Icon(Icons.Default.FastRewind, contentDescription = "Back 10 seconds")
             }
             Button(onClick = onPlayPause) {
@@ -87,10 +94,10 @@ fun NowPlayingScreen(
                     contentDescription = if (isPlaying) "Pause" else "Play"
                 )
             }
-            Button(onClick = {}) {
+            OutlinedButton(onClick = {}) {
                 Icon(Icons.Default.FastForward, contentDescription = "Forward 10 seconds")
             }
-            Button(onClick = onNext) {
+            OutlinedButton(onClick = onNext) {
                 Icon(Icons.Default.SkipNext, contentDescription = "Next")
             }
         }

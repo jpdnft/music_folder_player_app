@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import com.jpd3.musicfolderplayer.ui.theme.PlayerButton as Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,6 +16,8 @@ import androidx.navigation.NavController
 @Composable
 fun SettingsScreen(
     navController: NavController,
+    libraryFolder: String,
+    onChooseLibrary: () -> Unit,
     onClearState: () -> Unit = {}
 ) {
     Column(
@@ -25,19 +27,22 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.Top
     ) {
         Text(
-            text = "Settings",
+            text = "Library settings",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 16.dp)
         )
-        Text("App version: 0.1.0")
-        Text("Local folder playback only")
+        Text("Saved library folder: $libraryFolder")
+        Text("This folder is remembered between visits. Choose the main folder containing your artists and albums; browse them from Browse folders.")
+        Button(onClick = { navController.popBackStack() }) {
+            Text("Back to browsing")
+        }
         Button(
-            onClick = { navController.navigate(Screen.Setup.route) },
+            onClick = onChooseLibrary,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 20.dp)
         ) {
-            Text("Choose another music folder")
+            Text("Change saved library folder")
         }
         Button(
             onClick = onClearState,
@@ -45,7 +50,7 @@ fun SettingsScreen(
                 .fillMaxWidth()
                 .padding(top = 12.dp)
         ) {
-            Text("Clear saved playback state")
+            Text("Reset library and playback settings")
         }
     }
 }

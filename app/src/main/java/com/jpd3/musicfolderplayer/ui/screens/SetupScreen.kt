@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import com.jpd3.musicfolderplayer.ui.theme.PlayerButton as Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,18 +27,24 @@ fun SetupScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Welcome to Music Folder Player",
+            text = "Set up your music library",
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center
         )
         Text(
-            text = "Choose the main folder that contains your local music collection.",
+            text = "Choose the main folder containing all your artists and albums, such as MUSIC. This is a one-time setting that we remember. You can change it later in Library settings.",
             modifier = Modifier.padding(top = 16.dp, bottom = 24.dp),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyLarge
         )
         Button(onClick = onChooseFolder) {
-            Text("Choose Music Folder")
+            Text("Set library folder")
         }
+        Text(
+            "In the Android picker, select your main music folder and tap Use this folder. Then browse albums here in the app.",
+            modifier = Modifier.padding(top = 16.dp),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }

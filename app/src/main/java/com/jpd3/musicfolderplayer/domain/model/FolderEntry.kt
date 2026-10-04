@@ -6,7 +6,8 @@ sealed class FolderEntry {
     data class Folder(
         val uri: Uri,
         val name: String,
-        val childUri: Uri?
+        val childUri: Uri?,
+        val artworkUri: Uri? = null
     ) : FolderEntry()
 
     data class AudioFile(

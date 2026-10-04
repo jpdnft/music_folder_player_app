@@ -11,6 +11,7 @@ class MusicPlayerController(context: Context) {
     private var currentIndex: Int = -1
 
     fun setQueue(tracks: List<TrackInfo>) {
+        if (trackQueue == tracks) return
         trackQueue.clear()
         trackQueue.addAll(tracks)
         if (trackQueue.isEmpty()) {
@@ -28,14 +29,12 @@ class MusicPlayerController(context: Context) {
     fun playTrack(track: TrackInfo) {
         if (trackQueue.isEmpty()) {
             setQueue(listOf(track))
-            return
         }
 
         val nextIndex = trackQueue.indexOfFirst { it.uri == track.uri }
         if (nextIndex >= 0) {
             currentIndex = nextIndex
             player.seekTo(nextIndex, 0L)
-            player.prepare()
         }
         player.play()
     }

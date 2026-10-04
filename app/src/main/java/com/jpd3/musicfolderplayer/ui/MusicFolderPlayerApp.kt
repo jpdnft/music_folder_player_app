@@ -26,6 +26,7 @@ import androidx.navigation.compose.rememberNavController
 import com.jpd3.musicfolderplayer.data.preferences.AppPreferences
 import com.jpd3.musicfolderplayer.data.preferences.DataStoreAppPreferencesStore
 import com.jpd3.musicfolderplayer.domain.model.TrackInfo
+import com.jpd3.musicfolderplayer.util.FolderPathUtils
 import com.jpd3.musicfolderplayer.playback.MusicMediaSessionService
 import com.jpd3.musicfolderplayer.playback.MusicPlayerController
 import com.jpd3.musicfolderplayer.ui.screens.FolderBrowserScreen
@@ -78,8 +79,7 @@ fun MusicFolderPlayerApp() {
         }
 
         scope.launch {
-            preferencesStore.updateRootTreeUri(treeUri.toString())
-            preferencesStore.updateLastFolderUri(treeUri.toString())
+            preferencesStore.saveLibrary(treeUri.toString())
         }
 
         navController.navigate(Screen.FolderBrowser.route) {
@@ -127,7 +127,7 @@ fun MusicFolderPlayerApp() {
                         navController = navController,
                         rootUri = rootUri,
                         currentFolderUri = currentFolderUri,
-                        onChooseFolder = { documentTreeLauncher.launch(null) },
+                        onChooseFolder = { navController.navigate(Screen.Settings.route) },
                         onFolderSelected = { folderUri ->
                             scope.launch {
                                 preferencesStore.updateLastFolderUri(folderUri.toString())
@@ -141,10 +141,9 @@ fun MusicFolderPlayerApp() {
                             isPlaying = controller.isPlaying()
                             MusicMediaSessionService.start(context, track.name)
                             scope.launch {
-                                preferencesStore.updateQueueFolderUri(rootUri?.toString() ?: currentFolderUri?.toString())
-                                preferencesStore.updateCurrentTrack(track.uri.toString(), tracks.indexOf(track))
-                                preferencesStore.updateQueueState(true, true)
-                                preferencesStore.updatePlaybackPosition(0L)
+                                preferencesStore.savePlayback(
+                                    (currentFolderUri ?: rootUri)?.toString(), track.uri.toString(), tracks.indexOf(track)
+                                )
                             }
                             navController.navigate(Screen.NowPlaying.route)
                         }
@@ -165,6 +164,8 @@ fun MusicFolderPlayerApp() {
                 composable(Screen.Settings.route) {
                     SettingsScreen(
                         navController = navController,
+                        libraryFolder = FolderPathUtils.buildBreadcrumb(rootUri, rootUri).last(),
+                        onChooseLibrary = { documentTreeLauncher.launch(rootUri) },
                         onClearState = {
                             scope.launch {
                                 preferencesStore.clear()
@@ -172,6 +173,9 @@ fun MusicFolderPlayerApp() {
                             currentTrack = null
                             currentTrackTitle = "Demo Track"
                             isPlaying = false
+                            navController.navigate(Screen.Setup.route) {
+                                popUpTo(navController.graph.id) { inclusive = true }
+                            }
                         }
                     )
                 }

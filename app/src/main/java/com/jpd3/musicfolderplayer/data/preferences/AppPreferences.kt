@@ -33,11 +33,30 @@ interface AppPreferencesStore {
     suspend fun updatePlaybackPosition(positionMs: Long)
     suspend fun updateQueueState(hasResumableQueue: Boolean, playbackActive: Boolean)
     suspend fun clear() 
+    suspend fun saveLibrary(uri: String)
+    suspend fun savePlayback(folderUri: String?, trackUri: String, index: Int)
 }
 
 class DataStoreAppPreferencesStore(
     private val context: Context
 ) : AppPreferencesStore {
+    override suspend fun saveLibrary(uri: String) {
+        context.dataStore.edit {
+            it[Keys.ROOT_TREE_URI] = uri
+            it[Keys.LAST_FOLDER_URI] = uri
+        }
+    }
+
+    override suspend fun savePlayback(folderUri: String?, trackUri: String, index: Int) {
+        context.dataStore.edit {
+            if (folderUri == null) it.remove(Keys.QUEUE_FOLDER_URI) else it[Keys.QUEUE_FOLDER_URI] = folderUri
+            it[Keys.CURRENT_TRACK_URI] = trackUri
+            it[Keys.CURRENT_TRACK_INDEX] = index.toString()
+            it[Keys.HAS_RESUMABLE_QUEUE] = "true"
+            it[Keys.IS_PLAYBACK_ACTIVE] = "true"
+            it[Keys.PLAYBACK_POSITION_MS] = "0"
+        }
+    }
     private object Keys {
         val ROOT_TREE_URI = stringPreferencesKey("root_tree_uri")
         val LAST_FOLDER_URI = stringPreferencesKey("last_folder_uri")
