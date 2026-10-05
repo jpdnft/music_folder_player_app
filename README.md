@@ -1,6 +1,9 @@
 # Music Folder Player
 
-Music Folder Player is a simple free Android music player built with Kotlin, Jetpack Compose, Material 3, AndroidX Navigation, and Media3 ExoPlayer.
+Music Folder Player is a simple free Android music player built with Kotlin, Jetpack Compose, Material 3, AndroidX Navigation, and Media3 ExoPlayer. Here's what is does:  You launch the app, set your home Music folder, and then you can play any directory therein. No ads, no cost, no nothing. Just browse and play albums from your phone. I'm making this free and open-source. I recommend just making an APK via Android Studio and installing it directly on your phone.  Simple / easy.
+
+Many thanks to Codex for coding assistance!  Thanks.
+-Jim Dee -- JPD3.com
 
 ## Current status
 This is a first working version focused on a real local-folder music workflow:
