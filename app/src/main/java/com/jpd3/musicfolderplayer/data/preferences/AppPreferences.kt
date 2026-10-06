@@ -16,30 +16,29 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = DAT
 data class AppPreferences(
     val rootTreeUri: String? = null,
     val lastFolderUri: String? = null,
+    // Read-only legacy fields allow migration to the service-owned snapshot.
     val queueFolderUri: String? = null,
     val currentTrackUri: String? = null,
     val currentTrackIndex: Int = 0,
     val playbackPositionMs: Long = 0L,
     val hasResumableQueue: Boolean = false,
-    val isPlaybackActive: Boolean = false
+    val isPlaybackActive: Boolean = false,
+    val playbackSnapshot: String? = null
 )
 
 interface AppPreferencesStore {
     val preferences: Flow<AppPreferences>
-    suspend fun updateRootTreeUri(uri: String?)
     suspend fun updateLastFolderUri(uri: String?)
-    suspend fun updateQueueFolderUri(uri: String?)
-    suspend fun updateCurrentTrack(uri: String?, index: Int)
-    suspend fun updatePlaybackPosition(positionMs: Long)
-    suspend fun updateQueueState(hasResumableQueue: Boolean, playbackActive: Boolean)
     suspend fun clear() 
     suspend fun saveLibrary(uri: String)
-    suspend fun savePlayback(folderUri: String?, trackUri: String, index: Int)
 }
 
 class DataStoreAppPreferencesStore(
     private val context: Context
 ) : AppPreferencesStore {
+    suspend fun saveSnapshot(snapshot: String) {
+        context.dataStore.edit { it[Keys.PLAYBACK_SNAPSHOT] = snapshot }
+    }
     override suspend fun saveLibrary(uri: String) {
         context.dataStore.edit {
             it[Keys.ROOT_TREE_URI] = uri
@@ -47,17 +46,8 @@ class DataStoreAppPreferencesStore(
         }
     }
 
-    override suspend fun savePlayback(folderUri: String?, trackUri: String, index: Int) {
-        context.dataStore.edit {
-            if (folderUri == null) it.remove(Keys.QUEUE_FOLDER_URI) else it[Keys.QUEUE_FOLDER_URI] = folderUri
-            it[Keys.CURRENT_TRACK_URI] = trackUri
-            it[Keys.CURRENT_TRACK_INDEX] = index.toString()
-            it[Keys.HAS_RESUMABLE_QUEUE] = "true"
-            it[Keys.IS_PLAYBACK_ACTIVE] = "true"
-            it[Keys.PLAYBACK_POSITION_MS] = "0"
-        }
-    }
     private object Keys {
+        val PLAYBACK_SNAPSHOT = stringPreferencesKey("playback_snapshot")
         val ROOT_TREE_URI = stringPreferencesKey("root_tree_uri")
         val LAST_FOLDER_URI = stringPreferencesKey("last_folder_uri")
         val QUEUE_FOLDER_URI = stringPreferencesKey("queue_folder_uri")
@@ -77,38 +67,13 @@ class DataStoreAppPreferencesStore(
             currentTrackIndex = prefs[Keys.CURRENT_TRACK_INDEX]?.toIntOrNull() ?: 0,
             playbackPositionMs = prefs[Keys.PLAYBACK_POSITION_MS]?.toLongOrNull() ?: 0L,
             hasResumableQueue = prefs[Keys.HAS_RESUMABLE_QUEUE]?.toBooleanStrictOrNull() ?: false,
-            isPlaybackActive = prefs[Keys.IS_PLAYBACK_ACTIVE]?.toBooleanStrictOrNull() ?: false
+            isPlaybackActive = prefs[Keys.IS_PLAYBACK_ACTIVE]?.toBooleanStrictOrNull() ?: false,
+            playbackSnapshot = prefs[Keys.PLAYBACK_SNAPSHOT]
         )
     }
 
-    override suspend fun updateRootTreeUri(uri: String?) {
-        context.dataStore.edit { it[Keys.ROOT_TREE_URI] = uri ?: "" }
-    }
-
     override suspend fun updateLastFolderUri(uri: String?) {
-        context.dataStore.edit { it[Keys.LAST_FOLDER_URI] = uri ?: "" }
-    }
-
-    override suspend fun updateQueueFolderUri(uri: String?) {
-        context.dataStore.edit { it[Keys.QUEUE_FOLDER_URI] = uri ?: "" }
-    }
-
-    override suspend fun updateCurrentTrack(uri: String?, index: Int) {
-        context.dataStore.edit {
-            if (uri == null) it.remove(Keys.CURRENT_TRACK_URI) else it[Keys.CURRENT_TRACK_URI] = uri
-            it[Keys.CURRENT_TRACK_INDEX] = index.toString()
-        }
-    }
-
-    override suspend fun updatePlaybackPosition(positionMs: Long) {
-        context.dataStore.edit { it[Keys.PLAYBACK_POSITION_MS] = positionMs.toString() }
-    }
-
-    override suspend fun updateQueueState(hasResumableQueue: Boolean, playbackActive: Boolean) {
-        context.dataStore.edit {
-            it[Keys.HAS_RESUMABLE_QUEUE] = hasResumableQueue.toString()
-            it[Keys.IS_PLAYBACK_ACTIVE] = playbackActive.toString()
-        }
+        context.dataStore.edit { if (uri == null) it.remove(Keys.LAST_FOLDER_URI) else it[Keys.LAST_FOLDER_URI] = uri }
     }
 
     override suspend fun clear() {

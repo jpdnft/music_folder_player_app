@@ -13,7 +13,7 @@ import kotlin.coroutines.coroutineContext
 
 interface MusicDocumentStore {
     suspend fun listFolder(uri: Uri): FolderTraversal
-    suspend fun findArtwork(uri: Uri): Uri?
+    suspend fun findArtwork(uri: Uri, recursive: Boolean = false): Uri?
     suspend fun getRootFolder(uri: Uri): FolderTraversal
     suspend fun ensureReadable(uri: Uri): Boolean
 }
@@ -37,7 +37,7 @@ class RealMusicDocumentStore(private val context: Context) : MusicDocumentStore 
         FolderTraversal(
             currentFolderName = name,
             pathSegments = listOf(name),
-            folders = children.filter { it.isDirectory }.map {
+            folders = children.filter { it.isDirectory && !it.name.equals(".thumbnails", true) }.map {
                 FolderEntry.Folder(uri = it.uri, name = it.name, childUri = it.uri)
             },
             audioFiles = children.filter { !it.isDirectory && AudioFileClassifier.isSupportedAudioFile(it.name, it.mime) }
@@ -45,15 +45,27 @@ class RealMusicDocumentStore(private val context: Context) : MusicDocumentStore 
         )
     }
 
-    override suspend fun findArtwork(uri: Uri): Uri? = withContext(Dispatchers.IO) {
-        readChildren(uri).filter { !it.isDirectory &&
-            (it.mime?.startsWith("image/") == true || it.name.substringAfterLast('.', "").lowercase() in imageExtensions)
-        }.minByOrNull { it.name.lowercase() }?.uri
+    override suspend fun findArtwork(uri: Uri, recursive: Boolean): Uri? = withContext(Dispatchers.IO) {
+        val pending = ArrayDeque<Uri>().apply { add(uri) }
+        val visited = mutableSetOf<String>()
+        while (pending.isNotEmpty()) {
+            val folder = pending.removeFirst()
+            if (!visited.add(folder.toString())) continue
+            val children = try { readChildren(folder).sortedBy { it.name.lowercase() } }
+            catch (_: java.io.IOException) { continue }
+            catch (_: SecurityException) { continue }
+            children.firstOrNull { !it.isDirectory &&
+                (it.mime?.startsWith("image/") == true || it.name.substringAfterLast('.', "").lowercase() in imageExtensions)
+            }?.let { return@withContext it.uri }
+            if (recursive) children.filter { it.isDirectory && !it.name.equals(".thumbnails", true) }
+                .forEach { pending.add(it.uri) }
+        }
+        null
     }
 
     private suspend fun readChildren(uri: Uri): List<Document> {
         coroutineContext.ensureActive()
-        val id = if (DocumentsContract.isDocumentUri(context, uri)) DocumentsContract.getDocumentId(uri)
+        val id = if (uri.pathSegments.contains("document")) DocumentsContract.getDocumentId(uri)
             else DocumentsContract.getTreeDocumentId(uri)
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(uri, id)
         val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -71,7 +83,7 @@ class RealMusicDocumentStore(private val context: Context) : MusicDocumentStore 
         }
     }
 
-    override suspend fun getRootFolder(uri: Uri): FolderTraversal = listFolder(uri)
+    override suspend fun getRootFolder(uri: Uri): FolderTraversal = listFolder(uri).copy(audioFiles = emptyList())
 
     override suspend fun ensureReadable(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         DocumentFile.fromTreeUri(context, uri)?.canRead() == true

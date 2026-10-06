@@ -13,10 +13,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -25,9 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.jpd3.musicfolderplayer.data.preferences.AppPreferences
 import com.jpd3.musicfolderplayer.data.preferences.DataStoreAppPreferencesStore
-import com.jpd3.musicfolderplayer.domain.model.TrackInfo
 import com.jpd3.musicfolderplayer.util.FolderPathUtils
-import com.jpd3.musicfolderplayer.playback.MusicMediaSessionService
 import com.jpd3.musicfolderplayer.playback.MusicPlayerController
 import com.jpd3.musicfolderplayer.ui.screens.FolderBrowserScreen
 import com.jpd3.musicfolderplayer.ui.screens.NowPlayingScreen
@@ -47,20 +43,7 @@ fun MusicFolderPlayerApp() {
     val currentFolderUri = preferences.lastFolderUri?.let(Uri::parse)
     val scope = rememberCoroutineScope()
     val controller = remember { MusicPlayerController(context) }
-    var currentTrackTitle by remember { mutableStateOf("Demo Track") }
-    var isPlaying by remember { mutableStateOf(false) }
-    var currentTrack by remember { mutableStateOf<TrackInfo?>(null) }
-
-    LaunchedEffect(preferences.currentTrackUri) {
-        val savedTrackUri = preferences.currentTrackUri ?: return@LaunchedEffect
-        currentTrack = TrackInfo(
-            uri = Uri.parse(savedTrackUri),
-            name = Uri.parse(savedTrackUri).lastPathSegment ?: "Saved Track",
-            title = Uri.parse(savedTrackUri).lastPathSegment ?: "Saved Track"
-        )
-        currentTrackTitle = currentTrack?.name ?: "Saved Track"
-        isPlaying = preferences.isPlaybackActive
-    }
+    val playback by controller.state.collectAsState()
 
     DisposableEffect(Unit) {
         onDispose { controller.release() }
@@ -98,12 +81,12 @@ fun MusicFolderPlayerApp() {
     Scaffold(
         bottomBar = {
             BottomPlayerBar(
-                title = currentTrackTitle,
-                subtitle = currentTrack?.album?.ifBlank { currentTrack?.artist ?: "Local music" } ?: "Local music",
-                playing = isPlaying,
-                onPlayPause = { controller.playPause(); isPlaying = controller.isPlaying() },
-                onNext = { controller.nextTrack(); currentTrackTitle = controller.currentTrackTitle(); isPlaying = controller.isPlaying() },
-                onPrevious = { controller.previousTrack(); currentTrackTitle = controller.currentTrackTitle(); isPlaying = controller.isPlaying() }
+                title = playback.title,
+                subtitle = playback.album.ifBlank { playback.artist.ifBlank { "Local music" } },
+                playing = playback.playing,
+                onPlayPause = { controller.playPause() },
+                onNext = { controller.nextTrack() },
+                onPrevious = { controller.previousTrack() }
             )
         }
     ) { innerPadding ->
@@ -133,29 +116,27 @@ fun MusicFolderPlayerApp() {
                                 preferencesStore.updateLastFolderUri(folderUri.toString())
                             }
                         },
-                        onTrackSelected = { track, tracks ->
-                            currentTrack = track
-                            currentTrackTitle = track.name
-                            controller.setQueue(tracks)
-                            controller.playTrack(track)
-                            isPlaying = controller.isPlaying()
-                            MusicMediaSessionService.start(context, track.name)
-                            scope.launch {
-                                preferencesStore.savePlayback(
-                                    (currentFolderUri ?: rootUri)?.toString(), track.uri.toString(), tracks.indexOf(track)
-                                )
-                            }
+                        playbackReady = playback.connected,
+                        onTrackSelected = { track, tracks, folder ->
+                            controller.playFolderTrack(folder, tracks, track)
                             navController.navigate(Screen.NowPlaying.route)
                         }
                     )
                 }
                 composable(Screen.NowPlaying.route) {
                     NowPlayingScreen(
-                        trackName = currentTrackTitle,
-                        isPlaying = isPlaying,
-                        onPlayPause = { controller.playPause(); isPlaying = controller.isPlaying() },
-                        onPrevious = { controller.previousTrack(); currentTrackTitle = controller.currentTrackTitle(); isPlaying = controller.isPlaying() },
-                        onNext = { controller.nextTrack(); currentTrackTitle = controller.currentTrackTitle(); isPlaying = controller.isPlaying() }
+                        artworkUri = playback.artwork,
+                        mediaId = playback.mediaId,
+                        positionMs = playback.position,
+                        durationMs = playback.duration,
+                        seekable = playback.seekable,
+                        onSeek = controller::seekTo,
+                        playbackError = playback.error,
+                        trackName = playback.title,
+                        isPlaying = playback.playing,
+                        onPlayPause = { controller.playPause() },
+                        onPrevious = { controller.previousTrack() },
+                        onNext = { controller.nextTrack() }
                     )
                 }
                 composable(Screen.Recovery.route) {
@@ -167,12 +148,10 @@ fun MusicFolderPlayerApp() {
                         libraryFolder = FolderPathUtils.buildBreadcrumb(rootUri, rootUri).last(),
                         onChooseLibrary = { documentTreeLauncher.launch(rootUri) },
                         onClearState = {
+                            controller.clear()
                             scope.launch {
                                 preferencesStore.clear()
                             }
-                            currentTrack = null
-                            currentTrackTitle = "Demo Track"
-                            isPlaying = false
                             navController.navigate(Screen.Setup.route) {
                                 popUpTo(navController.graph.id) { inclusive = true }
                             }

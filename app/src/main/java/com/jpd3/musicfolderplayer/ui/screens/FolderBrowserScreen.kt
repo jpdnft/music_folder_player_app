@@ -1,9 +1,8 @@
 package com.jpd3.musicfolderplayer.ui.screens
 
 import android.net.Uri
-import android.graphics.BitmapFactory
+import com.jpd3.musicfolderplayer.ui.Artwork
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.jpd3.musicfolderplayer.ui.theme.PlayerButton as Button
@@ -26,9 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -36,9 +31,6 @@ import com.jpd3.musicfolderplayer.data.storage.FolderTraversal
 import com.jpd3.musicfolderplayer.data.storage.RealMusicDocumentStore
 import com.jpd3.musicfolderplayer.domain.model.TrackInfo
 import com.jpd3.musicfolderplayer.util.FolderPathUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
@@ -49,7 +41,8 @@ fun FolderBrowserScreen(
     currentFolderUri: Uri?,
     onChooseFolder: () -> Unit,
     onFolderSelected: (Uri) -> Unit,
-    onTrackSelected: (TrackInfo, List<TrackInfo>) -> Unit
+    playbackReady: Boolean,
+    onTrackSelected: (TrackInfo, List<TrackInfo>, Uri) -> Unit
 ) {
     val context = LocalContext.current
     val documentStore = remember { RealMusicDocumentStore(context.applicationContext) }
@@ -61,7 +54,8 @@ fun FolderBrowserScreen(
         traversal = null
         val selectedUri = currentFolderUri ?: rootUri ?: return@LaunchedEffect
         try {
-            traversal = documentStore.listFolder(selectedUri)
+            traversal = if (FolderPathUtils.parentFolder(rootUri, selectedUri) == null)
+                documentStore.getRootFolder(selectedUri) else documentStore.listFolder(selectedUri)
         } catch (_: java.io.IOException) {
             loadFailed = true
         } catch (_: SecurityException) {
@@ -73,7 +67,10 @@ fun FolderBrowserScreen(
     val breadcrumb = FolderPathUtils.buildBreadcrumb(rootUri, currentUri)
     val parentUri = FolderPathUtils.parentFolder(rootUri, currentUri)
     BackHandler(enabled = parentUri != null) { parentUri?.let(onFolderSelected) }
-    val trackList = remember(traversal) { traversal?.audioFiles?.map { file ->
+    val isRoot = parentUri == null
+    var folderArtwork by remember(currentUri) { mutableStateOf<Uri?>(null) }
+    LaunchedEffect(currentUri) { folderArtwork = currentUri?.let { documentStore.findArtwork(it) } }
+    val trackList = remember(traversal, isRoot) { (if (isRoot) emptyList() else traversal?.audioFiles.orEmpty()).map { file ->
         TrackInfo(
             uri = file.uri,
             name = file.name,
@@ -82,7 +79,7 @@ fun FolderBrowserScreen(
             album = file.album,
             mimeType = file.mimeType
         )
-    } ?: emptyList() }
+    } }
 
     Column(
         modifier = Modifier
@@ -126,6 +123,9 @@ fun FolderBrowserScreen(
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (trackList.isNotEmpty() && folderArtwork != null) {
+                item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { Artwork(folderArtwork) } }
+            }
             if (loadFailed) {
                 item { Text("Unable to read this folder. Check your library settings.") }
             } else if (traversal == null) {
@@ -153,7 +153,7 @@ fun FolderBrowserScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            FolderArtwork(folder.uri, documentStore, artworkLoads)
+                            FolderArtwork(folder.uri, folder.name, documentStore, artworkLoads)
                             Text(folder.name, modifier = Modifier.weight(1f))
                         }
                     }
@@ -170,7 +170,8 @@ fun FolderBrowserScreen(
                 }
                 items(trackList, key = { it.uri.toString() }) { track ->
                     OutlinedButton(
-                        onClick = { onTrackSelected(track, trackList) },
+                        onClick = { currentUri?.let { onTrackSelected(track, trackList, it) } },
+                        enabled = playbackReady,
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.small,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -191,8 +192,8 @@ fun FolderBrowserScreen(
             }
         }
         Button(
-            onClick = { trackList.firstOrNull()?.let { onTrackSelected(it, trackList) } },
-            enabled = trackList.isNotEmpty(),
+            onClick = { trackList.firstOrNull()?.let { track -> currentUri?.let { onTrackSelected(track, trackList, it) } } },
+            enabled = trackList.isNotEmpty() && playbackReady,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
         ) {
             Text("Play this Folder")
@@ -201,36 +202,10 @@ fun FolderBrowserScreen(
 }
 
 @Composable
-private fun FolderArtwork(folderUri: Uri, documentStore: RealMusicDocumentStore, loads: Semaphore) {
-    val resolver = LocalContext.current.contentResolver
-    var artwork by remember(folderUri) { mutableStateOf<ImageBitmap?>(null) }
+private fun FolderArtwork(folderUri: Uri, name: String, documentStore: RealMusicDocumentStore, loads: Semaphore) {
+    var uri by remember(folderUri) { mutableStateOf<Uri?>(null) }
     LaunchedEffect(folderUri) {
-        artwork = loads.withPermit { withContext(Dispatchers.IO) {
-            try {
-                val uri = documentStore.findArtwork(folderUri) ?: return@withContext null
-                ensureActive()
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
-                val options = BitmapFactory.Options().apply { inSampleSize = 1 }
-                while (bounds.outWidth / options.inSampleSize > 256 || bounds.outHeight / options.inSampleSize > 256) {
-                    options.inSampleSize *= 2
-                }
-                resolver.openInputStream(uri)?.use {
-                    ensureActive()
-                    BitmapFactory.decodeStream(it, null, options)?.asImageBitmap()
-                }
-            } catch (_: java.io.IOException) {
-                null
-            } catch (_: SecurityException) {
-                null
-            }
-        } }
+        uri = loads.withPermit { documentStore.findArtwork(folderUri, recursive = true) }
     }
-    artwork?.let {
-        Image(
-            bitmap = it, contentDescription = null,
-            modifier = Modifier.size(64.dp), contentScale = ContentScale.Crop
-        )
-    }
+    Artwork(uri, size = 64.dp, initial = name)
 }

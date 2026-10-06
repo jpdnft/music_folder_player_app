@@ -21,6 +21,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import android.net.Uri
+import com.jpd3.musicfolderplayer.ui.Artwork
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -32,21 +36,31 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun NowPlayingScreen(
+    artworkUri: Uri?,
+    mediaId: String?,
+    positionMs: Long,
+    durationMs: Long,
+    seekable: Boolean,
+    playbackError: String?,
+    onSeek: (Long) -> Unit,
     trackName: String,
     isPlaying: Boolean,
     onPlayPause: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit
 ) {
-    var progress by remember { mutableFloatStateOf(0.35f) }
+    var dragging by remember(mediaId) { androidx.compose.runtime.mutableStateOf(false) }
+    var progress by remember(mediaId) { mutableFloatStateOf(0f) }
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxSize().verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        if (artworkUri != null) Artwork(artworkUri)
+        playbackError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Text(
             text = "Now Playing",
             style = MaterialTheme.typography.titleMedium,
@@ -66,13 +80,18 @@ fun NowPlayingScreen(
         )
         }
 
-        Slider(value = progress, onValueChange = { progress = it }, modifier = Modifier.fillMaxWidth())
+        Slider(
+            value = if (dragging) progress else if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f,
+            onValueChange = { dragging = true; progress = it },
+            onValueChangeFinished = { onSeek((progress * durationMs).toLong()); dragging = false },
+            enabled = seekable && durationMs > 0, modifier = Modifier.fillMaxWidth()
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("00:32")
-            Text("03:49")
+            Text(formatTime(if (dragging) (progress * durationMs).toLong() else positionMs))
+            Text(formatTime(durationMs))
         }
 
         Row(
@@ -85,7 +104,7 @@ fun NowPlayingScreen(
             OutlinedButton(onClick = onPrevious) {
                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
             }
-            OutlinedButton(onClick = {}) {
+            OutlinedButton(onClick = { onSeek((positionMs - 10_000).coerceAtLeast(0)) }) {
                 Icon(Icons.Default.FastRewind, contentDescription = "Back 10 seconds")
             }
             Button(onClick = onPlayPause) {
@@ -94,7 +113,7 @@ fun NowPlayingScreen(
                     contentDescription = if (isPlaying) "Pause" else "Play"
                 )
             }
-            OutlinedButton(onClick = {}) {
+            OutlinedButton(onClick = { onSeek((positionMs + 10_000).coerceAtMost(durationMs)) }) {
                 Icon(Icons.Default.FastForward, contentDescription = "Forward 10 seconds")
             }
             OutlinedButton(onClick = onNext) {
@@ -102,4 +121,8 @@ fun NowPlayingScreen(
             }
         }
     }
+}
+
+private fun formatTime(ms: Long): String = java.util.Locale.ROOT.let { locale ->
+    String.format(locale, "%02d:%02d", ms / 60_000, (ms / 1000) % 60)
 }
